@@ -31,7 +31,8 @@ async def on_ready():
 
 @bot.event
 async def on_message(msg):
-    app.logger.info(f"User {msg.author.id} says \"{msg.content}\"")
+    if msg.author.id != bot.user.id:
+        app.logger.info(f"User {msg.author.name} says \"{msg.content}\"")
 
 async def _find_multi(ctx: SlashContext, users):
     msg = f"🔎 Hey {ctx.author.name}! Aqui está o resultado da minha investigação:"
@@ -40,7 +41,7 @@ async def _find_multi(ctx: SlashContext, users):
         found_this = False
         for vc in ctx.guild.voice_channels:
             if not found_this:
-                app.logger.debug(f"Members in {vc.name} -> " + ", ".join([member.name for member in vc.members]))
+                app.logger.debug(f"Members in {vc.name} -> [" + ", ".join([member.name for member in vc.members]) + "]")
                 if member in vc.members:
                     app.logger.debug(f"Found mentioned user {member.name} in vc {vc.name}")
                     found_this = True
