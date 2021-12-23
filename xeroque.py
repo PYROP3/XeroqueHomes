@@ -1,11 +1,12 @@
 import asyncio
 import discord
 import discord_slash
-import os
 import logging
+import os
+import sys
 from discord import flags
-from flask import Flask
 from dotenv import load_dotenv
+from flask import Flask
 from threading import Thread
 from discord.ext import commands
 from discord_slash import SlashCommand, SlashContext
@@ -14,21 +15,23 @@ load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 
 _ids = os.getenv('GUILD_IDS') or ""
-_guild_ids = [int(id) for id in _ids.split('.')]
+_guild_ids = [int(id) for id in _ids.split('.') if id != ""]
 guild_ids = _guild_ids if len(_guild_ids) else None
 
 bot = commands.Bot(command_prefix="/", self_bot=True, intents=discord.Intents.all())
 slash = SlashCommand(bot, sync_commands=True)
 app = Flask(__name__)
 app.logger.root.setLevel(logging.getLevelName(os.getenv('LOG_LEVEL') or 'DEBUG'))
-
-@app.route("/")
-def hello_world():
-    return "<p><a href=\"https://github.com/PYROP3\">Hello, World!</a></p>"
+handler = logging.StreamHandler(sys.stdout)
+app.logger.addHandler(handler)
 
 @bot.event
 async def on_ready():
     app.logger.info(f"{bot.user} has connected to Discord")
+
+@bot.event
+async def on_message(msg):
+    app.logger.info(f"User {msg.author.id} says \"{msg.content}\"")
 
 async def _find_multi(ctx: SlashContext, users):
     msg = f"🔎 Hey {ctx.author.name}! Aqui está o resultado da minha investigação:"
@@ -83,7 +86,5 @@ async def _find(ctx: SlashContext, **kwargs):
 @slash.context_menu(target=2, name="Find", guild_ids=guild_ids)
 async def _find_contextual(ctx: SlashContext, *args, **kwargs):
     await _find_one(ctx, ctx.target_author)
-
-Thread(target=app.run, kwargs={"host":"0.0.0.0", "port":os.getenv("PORT")}).start()
 
 bot.run(TOKEN)
