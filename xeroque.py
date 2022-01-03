@@ -13,6 +13,9 @@ from discord_slash import SlashCommand, SlashContext
 
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
+if TOKEN is None:
+    print("DISCORD_TOKEN env var not set! Exiting")
+    exit(1)
 
 _ids = os.getenv('GUILD_IDS') or ""
 _guild_ids = [int(id) for id in _ids.split('.') if id != ""]
@@ -22,35 +25,35 @@ bot = commands.Bot(command_prefix="/", self_bot=True, intents=discord.Intents.al
 slash = SlashCommand(bot, sync_commands=True)
 app = Flask(__name__)
 app.logger.root.setLevel(logging.getLevelName(os.getenv('LOG_LEVEL') or 'DEBUG'))
-handler = logging.StreamHandler(sys.stdout)
-app.logger.addHandler(handler)
+app.logger.addHandler(logging.StreamHandler(sys.stdout))
 
 @bot.event
 async def on_ready():
     app.logger.info(f"{bot.user} has connected to Discord")
 
 @bot.event
-async def on_message(msg):
+async def on_message(msg: discord.Message):
     if msg.author.id != bot.user.id:
-        app.logger.info(f"User {msg.author.name} says \"{msg.content}\"")
+        app.logger.info(f"[{msg.channel.guild.name} / {msg.channel.name}] {msg.author.name} says \"{msg.content}\"")
 
 async def _find_multi(ctx: SlashContext, users):
+    app.logger.info(f"[{ctx.guild.name} / {ctx.channel.name}] Inbound request from {ctx.author.name} for user(s): [" + ", ".join([member.name for member in users]) + "]")
     msg = f"🔎 Hey {ctx.author.name}! Aqui está o resultado da minha investigação:"
     vcs = {}
     for member in users:
         found_this = False
         for vc in ctx.guild.voice_channels:
             if not found_this:
-                app.logger.debug(f"Members in {vc.name} -> [" + ", ".join([member.name for member in vc.members]) + "]")
+                app.logger.debug(f"[{ctx.guild.name} / {ctx.channel.name} / {ctx.author.name}] Members in {vc.name} -> [" + ", ".join([member.name for member in vc.members]) + "]")
                 if member in vc.members:
-                    app.logger.debug(f"Found mentioned user {member.name} in vc {vc.name}")
+                    app.logger.info(f"[{ctx.guild.name} / {ctx.channel.name} / {ctx.author.name}] Found mentioned user {member.name} in vc {vc.name}")
                     found_this = True
                     try:
                         vcs[vc] += [member]
                     except KeyError:
                         vcs[vc] = [member]
         if not found_this:
-            app.logger.debug(f"Could not find {member.name}")
+            app.logger.debug(f"[{ctx.guild.name} / {ctx.channel.name} / {ctx.author.name}] Could not find {member.name}")
             try:
                 vcs[None] += [member]
             except KeyError:
@@ -59,16 +62,14 @@ async def _find_multi(ctx: SlashContext, users):
         if vc is not None:
             msg += "\n\t- " + ", ".join([member.name for member in vcs[vc]]) + " " + ("está" if len(vcs[vc]) == 1 else "estão") + f" em {vc.mention}"
     if None in vcs:
-        msg += "\n\t- " + ", ".join([member.name for member in vcs[vc]]) + " não " + ("está" if len(vcs[vc]) == 1 else "estão") + f" em nenhum chat de voz"
+        msg += "\n\t- " + ", ".join([member.name for member in vcs[None]]) + " não " + ("está" if len(vcs[None]) == 1 else "estão") + f" em nenhum chat de voz"
     await ctx.send(content=msg, hidden=True)
 
 async def _find_one(ctx, user):
     await _find_multi(ctx, [user])
 
 def toOrdinal(n: int):
-    if (n > 10 and n < 20): return f"{n}th"
-    order = n % 10
-    return "{}{}".format(n, ["th", "st", "nd", "rd", "th", "th", "th", "th", "th", "th"][order])
+    return f"{n}th" if (n > 10 and n < 20) else "{}{}".format(n, ["th", "st", "nd", "rd", "th", "th", "th", "th", "th", "th"][n % 10])
 
 n_users = 25
 
@@ -81,7 +82,6 @@ for i in range(n_users - 1):
 @slash.slash(name="find", description="Find users in voice channels", options=opts, guild_ids=guild_ids)
 async def _find(ctx: SlashContext, **kwargs):
     users = [kwargs[user] for user in kwargs if kwargs[user] is not None]
-    app.logger.debug("Mentioned " + ', '.join([user.name for user in users]))
     await _find_multi(ctx, users)
 
 @slash.context_menu(target=2, name="Find", guild_ids=guild_ids)
