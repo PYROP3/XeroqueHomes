@@ -1,5 +1,6 @@
 import asyncio
 import discord
+from discord.member import Member
 import discord_slash
 import logging
 import os
@@ -34,35 +35,35 @@ async def on_ready():
 @bot.event
 async def on_message(msg: discord.Message):
     if msg.author.id != bot.user.id:
-        app.logger.info(f"[{msg.channel.guild.name} / {msg.channel.name}] {msg.author.name} says \"{msg.content}\"")
+        app.logger.debug(f"[{msg.channel.guild.name} / {msg.channel}] {msg.author} says \"{msg.content}\"")
 
 async def _find_multi(ctx: SlashContext, users):
-    app.logger.info(f"[{ctx.guild.name} / {ctx.channel.name}] Inbound request from {ctx.author.name} for user(s): [" + ", ".join([member.name for member in users]) + "]")
-    msg = f"🔎 Hey {ctx.author.name}! Aqui está o resultado da minha investigação:"
+    app.logger.info(f"[{ctx.guild.name} / {ctx.channel}] Inbound request from {ctx.author} for user(s): [" + ", ".join([member.name for member in users]) + "]")
+    msg = f"🔎 Hey {ctx.author}! Aqui está o resultado da minha investigação:"
     vcs = {}
     for member in users:
         found_this = False
         for vc in ctx.guild.voice_channels:
             if not found_this:
-                app.logger.debug(f"[{ctx.guild.name} / {ctx.channel.name} / {ctx.author.name}] Members in {vc.name} -> [" + ", ".join([member.name for member in vc.members]) + "]")
+                app.logger.debug(f"[{ctx.guild.name} / {ctx.channel} / {ctx.author}] Members in {vc.name} -> [" + ", ".join([member.name for member in vc.members]) + "]")
                 if member in vc.members:
-                    app.logger.info(f"[{ctx.guild.name} / {ctx.channel.name} / {ctx.author.name}] Found mentioned user {member.name} in vc {vc.name}")
+                    app.logger.debug(f"[{ctx.guild.name} / {ctx.channel} / {ctx.author}] Found mentioned user {member} in vc {vc.name}")
                     found_this = True
                     try:
-                        vcs[vc] += [member]
+                        vcs[vc] += [prevent_selfmention(ctx, member)]
                     except KeyError:
-                        vcs[vc] = [member]
+                        vcs[vc] = [prevent_selfmention(ctx, member)]
         if not found_this:
-            app.logger.debug(f"[{ctx.guild.name} / {ctx.channel.name} / {ctx.author.name}] Could not find {member.name}")
+            app.logger.debug(f"[{ctx.guild.name} / {ctx.channel} / {ctx.author}] Could not find {member}")
             try:
-                vcs[None] += [member]
+                vcs[None] += [prevent_selfmention(ctx, member)]
             except KeyError:
-                vcs[None] = [member]
+                vcs[None] = [prevent_selfmention(ctx, member)]
     for vc in vcs:
         if vc is not None:
-            msg += "\n\t- " + ", ".join([member.name for member in vcs[vc]]) + " " + ("está" if len(vcs[vc]) == 1 else "estão") + f" em {vc.mention}"
+            msg += "\n\t- " + userListToStr(vcs[vc]) + " " + ("está" if len(vcs[vc]) == 1 else "estão") + f" em [{ctx.guild.get_channel(vc.category_id)}]{vc.mention}"
     if None in vcs:
-        msg += "\n\t- " + ", ".join([member.name for member in vcs[None]]) + " não " + ("está" if len(vcs[None]) == 1 else "estão") + f" em nenhum chat de voz"
+        msg += "\n\t- " + userListToStr(vcs[None]) + " não " + ("está" if len(vcs[None]) == 1 else "estão") + f" em nenhum chat de voz"
     await ctx.send(content=msg, hidden=True)
 
 async def _find_one(ctx, user):
@@ -70,6 +71,12 @@ async def _find_one(ctx, user):
 
 def toOrdinal(n: int):
     return f"{n}th" if (n > 10 and n < 20) else "{}{}".format(n, ["th", "st", "nd", "rd", "th", "th", "th", "th", "th", "th"][n % 10])
+
+def userListToStr(users) -> str:
+    return ", ".join(users[:-1]) + f" e {users[-1]}" if len(users) > 1 else users[0]
+
+def prevent_selfmention(ctx: SlashContext, member: Member):
+    return member.mention if member.id != ctx.author.id else "você"
 
 n_users = 25
 
@@ -87,33 +94,33 @@ opts = [discord_slash.manage_commands.create_option(name="role", description="Sq
 @slash.slash(name="findsquad", description="Find all users in a squad in voice channels", options=opts, guild_ids=guild_ids)
 async def _find_squad(ctx: SlashContext, *args, **kwargs):
     role = kwargs['role']
-    msg = f"🔎 Hey {ctx.author.name}! Aqui está o resultado da minha investigação:"
+    msg = f"🔎 Hey {ctx.author}! Aqui está o resultado da minha investigação:"
     vcs = {}
     found_members = []
     for vc in ctx.guild.voice_channels:
-        app.logger.debug(f"[{ctx.guild.name} / {ctx.channel.name} / {ctx.author.name}] Members in {vc.name} -> [" + ", ".join([member.name for member in vc.members]) + "]")
+        app.logger.debug(f"[{ctx.guild.name} / {ctx.channel} / {ctx.author}] Members in {vc.name} -> [" + ", ".join([member.name for member in vc.members]) + "]")
         for member in vc.members:
             if role in member.roles:
-                app.logger.debug(f"[{ctx.guild.name} / {ctx.channel.name} / {ctx.author.name}] Found user {member.name} in vc {vc.name}")
+                app.logger.debug(f"[{ctx.guild.name} / {ctx.channel} / {ctx.author}] Found user {member} in vc {vc.name}")
                 found_members += [member]
                 try:
-                    vcs[vc] += [member]
+                    vcs[vc] += [prevent_selfmention(ctx, member)]
                 except KeyError:
-                    vcs[vc] = [member]
+                    vcs[vc] = [prevent_selfmention(ctx, member)]
     for member in ctx.guild.members:
         if member not in found_members and role in member.roles:
-            app.logger.debug(f"[{ctx.guild.name} / {ctx.channel.name} / {ctx.author.name}] Found user {member.name} not in vc")
+            app.logger.debug(f"[{ctx.guild.name} / {ctx.channel} / {ctx.author}] Found user {member} not in vc")
             found_members += [member]
             try:
-                vcs[None] += [member]
+                vcs[None] += [prevent_selfmention(ctx, member)]
             except KeyError:
-                vcs[None] = [member]
+                vcs[None] = [prevent_selfmention(ctx, member)]
 
     for vc in vcs:
         if vc is not None:
-            msg += "\n\t- " + ", ".join([member.name for member in vcs[vc]]) + " " + ("está" if len(vcs[vc]) == 1 else "estão") + f" em {vc.mention}"
+            msg += "\n\t- " + userListToStr(vcs[vc]) + " " + ("está" if len(vcs[vc]) == 1 else "estão") + f" em [{ctx.guild.get_channel(vc.category_id)}]{vc.mention}"
     if None in vcs:
-        msg += "\n\t- " + ", ".join([member.name for member in vcs[None]]) + " não " + ("está" if len(vcs[None]) == 1 else "estão") + f" em nenhum chat de voz"
+        msg += "\n\t- " + userListToStr(vcs[None]) + " não " + ("está" if len(vcs[None]) == 1 else "estão") + f" em nenhum chat de voz"
     await ctx.send(content=msg, hidden=True)
 
 @slash.context_menu(target=2, name="Find", guild_ids=guild_ids)
