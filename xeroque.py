@@ -73,16 +73,48 @@ def toOrdinal(n: int):
 
 n_users = 25
 
+# Commands
+
 opts = [discord_slash.manage_commands.create_option(name="user", description="1st user to find", option_type=6, required=True)]
 for i in range(n_users - 1):
     opts += [discord_slash.manage_commands.create_option(name=f"additional_user{i}", description="{} user to find".format(toOrdinal(i + 2)), option_type=6, required=False)]
-
-# Commands
-
 @slash.slash(name="find", description="Find users in voice channels", options=opts, guild_ids=guild_ids)
 async def _find(ctx: SlashContext, **kwargs):
     users = [kwargs[user] for user in kwargs if kwargs[user] is not None]
     await _find_multi(ctx, users)
+
+opts = [discord_slash.manage_commands.create_option(name="role", description="Squad to find", option_type=8, required=True)]
+@slash.slash(name="findsquad", description="Find all users in a squad in voice channels", options=opts, guild_ids=guild_ids)
+async def _find_squad(ctx: SlashContext, *args, **kwargs):
+    role = kwargs['role']
+    msg = f"🔎 Hey {ctx.author.name}! Aqui está o resultado da minha investigação:"
+    vcs = {}
+    found_members = []
+    for vc in ctx.guild.voice_channels:
+        app.logger.debug(f"[{ctx.guild.name} / {ctx.channel.name} / {ctx.author.name}] Members in {vc.name} -> [" + ", ".join([member.name for member in vc.members]) + "]")
+        for member in vc.members:
+            if role in member.roles:
+                app.logger.debug(f"[{ctx.guild.name} / {ctx.channel.name} / {ctx.author.name}] Found user {member.name} in vc {vc.name}")
+                found_members += [member]
+                try:
+                    vcs[vc] += [member]
+                except KeyError:
+                    vcs[vc] = [member]
+    for member in ctx.guild.members:
+        if member not in found_members and role in member.roles:
+            app.logger.debug(f"[{ctx.guild.name} / {ctx.channel.name} / {ctx.author.name}] Found user {member.name} not in vc")
+            found_members += [member]
+            try:
+                vcs[None] += [member]
+            except KeyError:
+                vcs[None] = [member]
+
+    for vc in vcs:
+        if vc is not None:
+            msg += "\n\t- " + ", ".join([member.name for member in vcs[vc]]) + " " + ("está" if len(vcs[vc]) == 1 else "estão") + f" em {vc.mention}"
+    if None in vcs:
+        msg += "\n\t- " + ", ".join([member.name for member in vcs[None]]) + " não " + ("está" if len(vcs[None]) == 1 else "estão") + f" em nenhum chat de voz"
+    await ctx.send(content=msg, hidden=True)
 
 @slash.context_menu(target=2, name="Find", guild_ids=guild_ids)
 async def _find_contextual(ctx: SlashContext, *args, **kwargs):
