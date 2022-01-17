@@ -32,10 +32,23 @@ app.logger.addHandler(logging.StreamHandler(sys.stdout))
 async def on_ready():
     app.logger.info(f"{bot.user} has connected to Discord")
 
+legacy_commands = {}
+taken_commands = ['dog', 'cat', 'search', 'help']
+
 @bot.event
 async def on_message(msg: discord.Message):
     if msg.author.id != bot.user.id:
         app.logger.debug(f"[{msg.channel.guild.name} / {msg.channel}] {msg.author} says \"{msg.content}\"")
+        content = msg.content
+        if content.startswith("--"):
+            parsed = content[2:].split(' ')
+            if len(parsed) > 0:
+                if parsed[0] in legacy_commands:
+                    pass
+                else:
+                    if parsed[0] not in taken_commands:
+                        msg.reply("Psst {ctx.author}! Se você quer usar o comando de busca do Dog-Cat-Bot, tem que usar o comando `--search [conteúdo]`.\nNa dúvida, pode usar o `--help` para obter mais informações!")
+
 
 async def _find_multi(ctx: SlashContext, users):
     app.logger.info(f"[{ctx.guild.name} / {ctx.channel}] Inbound request from {ctx.author} for user(s): [" + ", ".join([member.name for member in users]) + "]")
